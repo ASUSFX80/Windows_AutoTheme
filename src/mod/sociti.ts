@@ -6,34 +6,42 @@ type Props = (key: string, lang?: string) => any;
 
 
 export const GetHttp = async (url: string, RequestInit?: RequestInit) => {
-    const RequestInits = RequestInit ? RequestInit : {
+    const RequestInits = RequestInit ?? {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
     }
-    const response = await fetchHttp(url, RequestInits);
-
-    if (response.ok) {
+    const controller = new AbortController();
+    const signal = RequestInit?.signal
+        ? AbortSignal.any([RequestInit.signal, controller.signal])
+        : controller.signal;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<false>(resolve => {
+        timeoutId = setTimeout(() => {
+            resolve(false);
+            controller.abort();
+        }, 15000);
+    });
+    const request = async () => {
+        const response = await fetchHttp(url, { ...RequestInits, signal });
+        if (!response.ok) return false;
         const contentType = response.headers.get('Content-Type') || '';
         const contentEncoding = response.headers.get('Content-Encoding');
-
-        let data;
         if (contentType.includes('text/html')) {
-            // 如果是 HTML，则直接返回文本内容
-
-            data = await response.text();
+            return response.text();
         } else if (contentEncoding && contentEncoding.includes('gzip')) {
-            // 响应体是 Gzip 压缩的，需要解压
             const arrayBuffer = await response.arrayBuffer();
             const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
-            data = JSON.parse(decompressed); // 解压后解析 JSON
+            return JSON.parse(decompressed);
         } else {
-            // 默认情况下解析 JSON
-            data = await response.json();
+            return response.json();
         }
-        return data;
+    };
+    try {
+        // Abort alone may not settle a stalled native response-body stream.
+        return await Promise.race([request(), timeout]);
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    return false;
 };
 const Apikey = 'bdd98ec1d87747f3a2e8b1741a5af796'
 const Languages: Record<string, string> = {
@@ -51,8 +59,6 @@ const AppCiti: Props = async (name, lang) => {
         getUrl = `https://geoapi.qweather.com/v2/city/top?number=10&lang=${langs}&range=${range}`
     }
     const url = `${getUrl}&key=${Apikey}`;
-    console.log(url);
-
     const data = await GetHttp(url)
 
     return data
@@ -72,6 +78,10 @@ type SunriseOptions = {
 // 定位位置
 export async function getLocation() {
     const data = await GetHttp("http://demo.ip-api.com/json/?fields=66842623&lang=en")
+    if (!Number.isFinite(data?.lat) || !Number.isFinite(data?.lon)
+        || Math.abs(data.lat) > 90 || Math.abs(data.lon) > 180) {
+        return undefined
+    }
     const backdata: positionType = {
         lat: data?.lat,
         lng: data?.lon,

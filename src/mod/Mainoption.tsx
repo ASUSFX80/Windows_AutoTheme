@@ -92,39 +92,33 @@ const Mainoption: MainopType = ({
                     })
             }
         } else {
-            CitiInit()
+            await CitiInit()
+            setRcOpenLoad(false)
         }
 
     }
 
     const CitiInit = async (citiids?: positionType) => {
         setCitiLoad(true)
-        if (AppData?.language) { //必须初始语言才会开始自动获取定位
-            //const citiID = citiids ? { hid: citiids } : await Sunrise('', AppData?.language)
-            let citiID: positionType | undefined = citiids
-            if (!citiids) {
-                citiID = await getLocation()
-                if (!citiID) {
-                    messageApi.error(locale.main?.TabsOptionBError) //获取定位数据失败
-                        .then(() => {
-                            setData({ city: { name: '' } })
-                            setCitiLoad(false)
-                        })
-                    return
-                }
+        try {
+            if (!AppData?.language) return //必须初始语言才会开始自动获取定位
+            const citiID = citiids ?? await getLocation()
+            if (citiID?.lat == null || citiID?.lng == null) {
+                throw new Error('Location unavailable')
             }
-            if (citiID?.lng) {
-                const Citiop = await AppCiti(`${citiID.lng},${citiID.lat}`, AppData?.language)
-                const err = Citiop.location?.[0]
-                console.log(err);
-
-                const names = formatCityDisplayByHierarchy(err)
-                setCitiname(names)
-                setData({ city: { position: citiID, name: names }, rcrl: true })
+            const Citiop = await AppCiti(`${citiID.lng},${citiID.lat}`, AppData.language)
+            const city = Citiop?.location?.[0]
+            if (Citiop?.code !== '200' || typeof city?.name !== 'string' || !city.name.trim()) {
+                throw new Error('City unavailable')
             }
-
+            const names = formatCityDisplayByHierarchy(city)
+            setCitiname(names)
+            setData({ city: { position: citiID, name: names }, rcrl: true })
+        } catch {
+            messageApi.error(locale?.main?.TabsOptionBError)
+        } finally {
+            setCitiLoad(false)
         }
-        setCitiLoad(false)
     }
 
     useEffect(() => {
