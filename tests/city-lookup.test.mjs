@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import dayjs from 'dayjs';
 import * as pako from 'pako';
+import * as React from 'react';
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 
 // Execute the real TS/TSX modules with only platform, UI hooks and storage replaced.
@@ -68,6 +69,28 @@ async function setup(fetch, globals) {
     }
     return { render, errors, AppData, sociti, search };
 }
+
+test('time offset preserves every minute from 0 to 60 and back after rerender', async () => {
+    const app = await setup(() => assert.fail('adjusting the offset must not request location'));
+    const { default: Deviation } = await loadModule('../src/mod/Deviation.tsx', {
+        react: { ...React, default: React },
+        'react/jsx-runtime': { jsx, jsxs, Fragment },
+        antd: { Button: 'Button', Flex: 'Flex', Slider: 'Slider', Tooltip: 'Tooltip' },
+        '@ant-design/icons': { QuestionOutlined: 'QuestionOutlined' },
+    });
+    const slider = () => Deviation(app.render().mains.find(item => item.key === 'deviation').change.props).props.children[1].props;
+    for (const direction of [1, -1]) {
+        for (let i = 0; i <= 60; i++) {
+            const value = direction === 1 ? i : 60 - i;
+            slider().onChange(value);
+            assert.equal(app.AppData.deviation, value);
+            assert.equal(slider().value, value, `slider must stay at ${value}`);
+        }
+    }
+    assert.equal(slider().min, 0);
+    assert.equal(slider().max, 60);
+    assert.equal(slider().marks[60], '60');
+});
 
 test('issue #31: HTTP 403 releases the city button and input without erasing the saved city', async () => {
     const app = await setup(async () => new Response(null, { status: 403 }));

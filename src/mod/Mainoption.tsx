@@ -219,7 +219,7 @@ const Mainoption: MainopType = ({
             label: locale?.main?.deviationTitle,
             hide: !AppData?.rcrl,
             change: <Deviation
-                value={AppData?.deviation || 20}
+                value={AppData?.deviation ?? 15}
                 setVal={(e) => {
                     setData({ deviation: e });
                 }}
