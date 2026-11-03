@@ -1,7 +1,7 @@
 import { enable, disable } from "@tauri-apps/plugin-autostart"
 import { Input, AutoComplete, AutoCompleteProps, TimePicker, Button, Flex, Segmented, Tooltip, Space } from "antd"
 import dayjs from "dayjs"
-import { AppCiti, getLocation, Sunrise } from "./sociti"
+import { getLocation, Sunrise } from "./sociti"
 import { positionType, TimesProps } from "../Type"
 import type { MessageInstance } from "antd/es/message/interface"
 import { useRequest, useUpdateEffect } from "ahooks"
@@ -11,7 +11,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { isWin11 } from "./ThemeConfig"
 import Deviation from "./Deviation"
 import { openUrl } from "@tauri-apps/plugin-opener"
-import { formatCityDisplayByHierarchy } from "./searchCiti"
 import ThemeSelector from "../com/ThemeSelector"
 import DataSave from "./DataSave"
 export interface mainsType {
@@ -102,18 +101,15 @@ const Mainoption: MainopType = ({
         setCitiLoad(true)
         try {
             if (!AppData?.language) return //必须初始语言才会开始自动获取定位
-            const citiID = citiids ?? await getLocation()
-            if (citiID?.lat == null || citiID?.lng == null) {
+            const location = citiids
+                ? { ...citiids, name: AppData.city?.name || `${citiids.lat}, ${citiids.lng}` }
+                : await getLocation()
+            if (location?.lat == null || location?.lng == null) {
                 throw new Error('Location unavailable')
             }
-            const Citiop = await AppCiti(`${citiID.lng},${citiID.lat}`, AppData.language)
-            const city = Citiop?.location?.[0]
-            if (Citiop?.code !== '200' || typeof city?.name !== 'string' || !city.name.trim()) {
-                throw new Error('City unavailable')
-            }
-            const names = formatCityDisplayByHierarchy(city)
-            setCitiname(names)
-            setData({ city: { position: citiID, name: names }, rcrl: true })
+            const { name, ...position } = location
+            setCitiname(name)
+            setData({ city: { position, name }, rcrl: true })
         } catch {
             messageApi.error(locale?.main?.TabsOptionBError)
         } finally {

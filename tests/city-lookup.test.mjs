@@ -70,9 +70,7 @@ async function setup(fetch, globals) {
 }
 
 test('issue #31: HTTP 403 releases the city button and input without erasing the saved city', async () => {
-    const app = await setup(async url => url.includes('ip-api.com')
-        ? Response.json(locationResponse)
-        : new Response(null, { status: 403 }));
+    const app = await setup(async () => new Response(null, { status: 403 }));
     const savedCity = app.AppData.city;
     const lookup = app.render().button.onClick();
     assert.equal(app.render().button.disabled, true);
@@ -90,8 +88,8 @@ for (const [name, fetch] of [
     ['malformed JSON', async () => new Response('{')],
     ['missing coordinates', async () => Response.json({ status: 'fail' })],
     ['invalid coordinates', async () => Response.json({ ...locationResponse, lat: 91 })],
-    ['empty city list', async url => Response.json(url.includes('ip-api.com') ? locationResponse : { code: '200', location: [] })],
-    ['null city response', async url => Response.json(url.includes('ip-api.com') ? locationResponse : null)],
+    ['missing timezone', async () => Response.json({ lat: 0, lon: 0 })],
+    ['null location response', async () => Response.json(null)],
 ]) {
     test(`${name}: report failure, preserve the saved city and release controls`, async () => {
         const app = await setup(fetch);
@@ -107,9 +105,7 @@ for (const [name, fetch] of [
 }
 
 test('successful lookup accepts zero coordinates and saves the city', async () => {
-    const app = await setup(async url => Response.json(url.includes('ip-api.com')
-        ? { lat: 0, lon: 0, timezone: 'UTC' }
-        : { code: '200', location: [{ adm1: 'Region', adm2: 'City', name: 'City' }] }));
+    const app = await setup(async () => Response.json({ lat: 0, lon: 0, timezone: 'UTC', regionName: 'Region', city: 'City' }));
     await app.render().button.onClick();
     assert.equal(app.AppData.city.name, 'Region - City');
     assert.equal(app.AppData.city.position.lng, 0);
@@ -193,4 +189,53 @@ test('every supported language includes the city lookup error', async () => {
         const translation = JSON.parse(await readFile(new URL(`../src/language/${file}.json`, import.meta.url), 'utf8'));
         assert.ok(translation.main.TabsOptionBError, file);
     }
+});
+
+test('automatic location works without a second city lookup when QWeather is unavailable', async () => {
+    const requests = [];
+    const app = await setup(async url => {
+        requests.push(new URL(url).hostname);
+        return url.includes('ip-api.com')
+            ? Response.json({ ...locationResponse, regionName: 'Shanghai', city: 'Shanghai' })
+            : new Response(null, { status: 403 });
+    });
+    await app.render().button.onClick();
+    assert.equal(app.errors.length, 0, 'valid IP location must not depend on QWeather authorization');
+    assert.equal(app.AppData.city.name, 'Shanghai');
+    assert.equal(app.AppData.city.position.lat, position.lat);
+    assert.deepEqual(requests, ['demo.ip-api.com']);
+});
+
+test('saved city refresh does not require reverse geocoding', async () => {
+    const app = await setup(() => assert.fail('saved coordinates must not trigger another city lookup'));
+    await app.render().CitiInit(position);
+    assert.equal(app.errors.length, 0);
+    assert.equal(app.AppData.city.name, 'Saved city');
+    assert.equal(app.render().button.disabled, false);
+});
+
+test('valid coordinates without a city name remain usable for sunrise calculation', async () => {
+    const app = await setup(async () => Response.json(locationResponse));
+    await app.render().button.onClick();
+    assert.equal(app.errors.length, 0);
+    assert.equal(app.AppData.city.name, `${position.lat}, ${position.lng}`);
+    assert.equal(app.AppData.city.position.tzid, position.tzid);
+});
+
+test('live automatic location succeeds using only the existing IP endpoint', {
+    skip: process.env.LIVE_LOCATION_TEST !== '1', timeout: 25000,
+}, async () => {
+    const requests = [];
+    const app = await setup((url, init) => {
+        const host = new URL(url).hostname;
+        requests.push(host);
+        assert.equal(host, 'demo.ip-api.com', 'automatic location must not need a second provider');
+        return fetch(url, init);
+    });
+    await app.render().button.onClick();
+    assert.equal(app.errors.length, 0, 'live automatic location failed');
+    assert.ok(Number.isFinite(app.AppData.city.position.lat));
+    assert.ok(Number.isFinite(app.AppData.city.position.lng));
+    assert.ok(app.AppData.city.name);
+    assert.deepEqual(requests, ['demo.ip-api.com']);
 });

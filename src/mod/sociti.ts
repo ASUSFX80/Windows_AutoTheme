@@ -79,13 +79,18 @@ type SunriseOptions = {
 export async function getLocation() {
     const data = await GetHttp("http://demo.ip-api.com/json/?fields=66842623&lang=en")
     if (!Number.isFinite(data?.lat) || !Number.isFinite(data?.lon)
-        || Math.abs(data.lat) > 90 || Math.abs(data.lon) > 180) {
+        || Math.abs(data.lat) > 90 || Math.abs(data.lon) > 180
+        || typeof data.timezone !== 'string' || !data.timezone) {
         return undefined
     }
-    const backdata: positionType = {
+    const names = [data.regionName, data.city].filter(
+        (name, index, all) => typeof name === 'string' && name.trim() && all.indexOf(name) === index
+    )
+    const backdata: positionType & { name: string } = {
         lat: data?.lat,
         lng: data?.lon,
-        tzid: data?.timezone
+        tzid: data.timezone,
+        name: names.join(' - ') || `${data.lat}, ${data.lon}`
     }
     return backdata
 }
