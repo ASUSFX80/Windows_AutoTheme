@@ -1,6 +1,6 @@
 [package]
 name = "AutoThemeMode"
-version = "1.6.1"
+version = "1.6.2"
 description = "AutoThemeMode"
 authors = ["you"]
 edition = "2021"
@@ -23,7 +23,8 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [ "tray-icon", "image-png" ] }
 serde_json = "1"
-tauri-plugin-http = "2"
+# Match the JS HTTP plugin: response-body IPC differs across minor versions.
+tauri-plugin-http = "=2.8.3"
 tokio = { version = "1", features = ["full", "rt-multi-thread", "macros"] }
 winapi = { version = "0.3", features = ["winuser", "winbase"] }
 chrono = "0.4"

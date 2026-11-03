@@ -16,7 +16,7 @@ async function loadModule(path, dependencies, globals = {}) {
     });
     const exports = {};
     await runInNewContext(`(async () => { ${outputText}\n })()`, {
-        exports, Uint8Array, AbortController, AbortSignal, setTimeout, clearTimeout,
+        exports, Uint8Array, TextDecoder, AbortController, AbortSignal, setTimeout, clearTimeout,
         console: { log() {}, error() {} },
         require(name) {
             assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
@@ -175,6 +175,7 @@ test('HTTP helper preserves JSON, HTML, gzip and non-2xx response handling', asy
         [Response.json({ ok: true }), { ok: true }],
         [new Response('<html>test</html>', { headers: { 'Content-Type': 'text/html' } }), '<html>test</html>'],
         [new Response(pako.gzip('{"ok":true}'), { headers: { 'Content-Encoding': 'gzip' } }), { ok: true }],
+        [new Response('{"ok":true}', { headers: { 'Content-Encoding': 'gzip' } }), { ok: true }],
         [new Response(null, { status: 403 }), false],
     ]) {
         let cleared = false;
@@ -222,6 +223,38 @@ test('valid coordinates without a city name remain usable for sunrise calculatio
     assert.equal(app.AppData.city.position.tzid, position.tzid);
 });
 
+test('manual city search uses Open-Meteo and preserves coordinates and timezone', async () => {
+    let requested;
+    const app = await setup(async url => {
+        requested = new URL(url);
+        return Response.json({ results: [{ id: 1790630, name: '西安', admin1: '陕西省', latitude: 34.26, longitude: 108.93, timezone: 'Asia/Shanghai', country: '中国' }] });
+    });
+    const options = await app.search.searchResult('西安', app.AppData);
+    assert.equal(options.length, 1);
+    assert.equal(requested.hostname, 'geocoding-api.open-meteo.com');
+    assert.equal(requested.searchParams.get('name'), '西安');
+    assert.equal(requested.searchParams.get('language'), 'zh');
+    assert.equal(requested.searchParams.has('key'), false);
+    assert.equal(options[0].value, '陕西省 - 西安');
+    assert.equal(options[0].position.lat, 34.26);
+    assert.equal(options[0].position.lng, 108.93);
+    assert.equal(options[0].position.tzid, 'Asia/Shanghai');
+});
+
+test('manual search skips empty input and handles unavailable or invalid results', async () => {
+    const noRequest = await setup(() => assert.fail('empty query must not make a request'));
+    assert.equal((await noRequest.search.searchResult('', noRequest.AppData)).length, 0);
+    for (const fetch of [
+        async () => { throw new Error('offline'); },
+        async () => new Response(null, { status: 403 }),
+        async () => Response.json({ results: {} }),
+        async () => Response.json({ results: [null, { name: 'Missing coordinates' }] }),
+    ]) {
+        const app = await setup(fetch);
+        assert.equal((await app.search.searchResult('西安', app.AppData)).length, 0);
+    }
+});
+
 test('live automatic location succeeds using only the existing IP endpoint', {
     skip: process.env.LIVE_LOCATION_TEST !== '1', timeout: 25000,
 }, async () => {
@@ -238,4 +271,19 @@ test('live automatic location succeeds using only the existing IP endpoint', {
     assert.ok(Number.isFinite(app.AppData.city.position.lng));
     assert.ok(app.AppData.city.name);
     assert.deepEqual(requests, ['demo.ip-api.com']);
+});
+
+test('live Xi’an search and sunrise calculation succeed', {
+    skip: process.env.LIVE_LOCATION_TEST !== '1', timeout: 35000,
+}, async () => {
+    const app = await setup((url, init) => {
+        assert.ok(['geocoding-api.open-meteo.com', 'api.sunrise-sunset.org'].includes(new URL(url).hostname));
+        return fetch(url, init);
+    });
+    const options = await app.search.searchResult('西安', app.AppData);
+    const city = options.find(option => option.value.includes('陕西'));
+    assert.ok(city, 'Xi’an, Shaanxi must be available in the search results');
+    const times = await app.sociti.Sunrise(city.position, { maxAttempts: 1 });
+    assert.match(times?.rise ?? '', /^\d{2}:\d{2}:\d{2}$/);
+    assert.match(times?.set ?? '', /^\d{2}:\d{2}:\d{2}$/);
 });

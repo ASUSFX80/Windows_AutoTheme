@@ -1,7 +1,7 @@
 import { fetch as fetchHttp } from '@tauri-apps/plugin-http';
 import * as pako from 'pako';
 import { positionType } from '../Type';
-type Props = (key: string, lang?: string) => any;
+
 
 
 
@@ -29,8 +29,11 @@ export const GetHttp = async (url: string, RequestInit?: RequestInit) => {
         if (contentType.includes('text/html')) {
             return response.text();
         } else if (contentEncoding && contentEncoding.includes('gzip')) {
-            const arrayBuffer = await response.arrayBuffer();
-            const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            // Some HTTP clients decompress the body but retain the gzip header.
+            const decompressed = bytes[0] === 0x1f && bytes[1] === 0x8b
+                ? pako.ungzip(bytes, { to: 'string' })
+                : new TextDecoder().decode(bytes);
             return JSON.parse(decompressed);
         } else {
             return response.json();
@@ -43,31 +46,6 @@ export const GetHttp = async (url: string, RequestInit?: RequestInit) => {
         clearTimeout(timeoutId);
     }
 };
-const Apikey = 'bdd98ec1d87747f3a2e8b1741a5af796'
-const Languages: Record<string, string> = {
-    'zh_HK': 'zh-hant'
-}
-
-const AppCiti: Props = async (name, lang) => {
-    lang = lang || 'en_US' as string
-    const langs = Languages[lang] || lang.split('_')[0]
-    let getUrl = ''
-    if (name) {
-        getUrl = `https://geoapi.qweather.com/v2/city/lookup?location=${encodeURI(name)}&lang=${langs}`
-    } else {
-        const range = (lang === 'zh_HK' ? 'CN' : lang.split('_')[1]).toUpperCase().toLowerCase();
-        getUrl = `https://geoapi.qweather.com/v2/city/top?number=10&lang=${langs}&range=${range}`
-    }
-    const url = `${getUrl}&key=${Apikey}`;
-    const data = await GetHttp(url)
-
-    return data
-}
-
-
-// 假设 GetHttp(url: string) => Promise<string | null | undefined>
-// 假设 extractSunMoonData(html: string) => Promise<YourResultType>
-
 type SunriseOptions = {
     maxAttempts?: number;      // 最多尝试次数（包含首次请求），默认 10
     baseDelayMs?: number;      // 基础退避时间（ms），默认 500
@@ -174,4 +152,4 @@ async function Sunrise(
     return null;
 }
 
-export { AppCiti, Sunrise };
+export { Sunrise };
