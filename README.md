@@ -73,6 +73,8 @@ npm run tauri build
 
 工作流先运行回归测试，再生成 Windows x64 NSIS 安装包。构建成功后，在该次运行页面的 **Artifacts** 下载 **AutoThemeMode-windows-x64**，解压后运行 `*-setup.exe`。文件保留 14 天，安装包未配置代码签名。
 
+正式发版时，先更新 `src-tauri/Cargo.toml` 中的版本号，再推送对应的 `v版本号` 标签（例如 `v1.6.4`）。工作流会在构建成功后自动创建 GitHub Release 并附上安装包；标签必须与安装包版本一致。Release 附件不受上述 14 天保留期限制。普通 main 推送、PR 和手动构建只上传 Artifacts；Microsoft Store 发布需另行处理。
+
 ## 其它仓库
 - Gitee (国内推荐): [https://gitee.com/ilinxuan/windows_-auto-theme](https://gitee.com/ilinxuan/windows_-auto-theme) 
 - GitHub: [https://github.com/tuyangJs/Windows_AutoTheme](https://github.com/tuyangJs/Windows_AutoTheme) 

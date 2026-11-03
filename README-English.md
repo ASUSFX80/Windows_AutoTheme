@@ -64,6 +64,8 @@ After pushing the code and `.github/workflows/windows-build.yml` to GitHub, push
 
 The workflow runs regression tests and builds a Windows x64 NSIS installer. After a successful run, download **AutoThemeMode-windows-x64** from the run's **Artifacts** section, extract it, and run `*-setup.exe`. Artifacts are retained for 14 days. Code signing is not configured for this installer.
 
+To publish a release, update the version in `src-tauri/Cargo.toml`, then push the matching `v<version>` tag (for example, `v1.6.4`). After a successful build, the workflow creates a GitHub Release with the installer attached; the tag must match the installer version. Release assets are not subject to the 14-day artifact retention period. Regular main pushes, PRs, and manual builds only upload artifacts. Microsoft Store publishing remains separate.
+
 ## Additional Repositories
 
 - **Gitee (Recommended for China users):** [https://gitee.com/ilinxuan/windows_-auto-theme](https://gitee.com/ilinxuan/windows_-auto-theme)
